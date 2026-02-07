@@ -19,6 +19,8 @@ namespace LapixModules
             debugOptions.GuaranteeFolder(AppContext.BaseDirectory + "TestFolder");
             nSMIWrapper.VerifyNvidiaSMI();
 
+            MessageBox.Show("Current Power Limit: " + nSMIWrapper.GetPowerLimit() + "W" + "\n" + "TDP Modifiable?: " + nSMIWrapper.TDPModifiable());
+
         }
     }
 }

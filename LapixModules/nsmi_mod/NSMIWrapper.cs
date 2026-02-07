@@ -17,7 +17,7 @@ namespace LapixModules.nsmi_mod
         //change if user has customized drivers or other gpus.
         //currently only nvidia cards are supported desktop and mobile.
 
-        private String nvidiaSMIDirectory = "C:\\Windows\\system32\\nvidia-smi.exe";
+        readonly private String nvidiaSMIDirectory = "C:\\Windows\\system32\\nvidia-smi.exe";
         private int PowerLimit;
 
         // Create object for nvidiaSMI
@@ -27,8 +27,10 @@ namespace LapixModules.nsmi_mod
         // Create constructor to reference instance fields
 
         // predetermined arguments
-        private String ArgPowerLimit = String.Empty;
-        private String ArgTDP = String.Empty;
+        readonly private String ArgPowerLimit = String.Empty;
+        readonly private String ArgTDP = String.Empty;
+
+        DebugOptions debugOptions = new DebugOptions();
 
         public NSMIWrapper()
         {
@@ -44,12 +46,11 @@ namespace LapixModules.nsmi_mod
             // Define Args CheatSheet Here.
 
             ArgPowerLimit = "-q -d POWER";
-            ArgTDP = "-pl";
+            ArgTDP = "-pl ";
         } 
 
         public void VerifyNvidiaSMI()
         {
-            DebugOptions debugOptions = new DebugOptions();
 
             if(debugOptions.CheckFile(nvidiaSMIDirectory))
             {
@@ -57,92 +58,104 @@ namespace LapixModules.nsmi_mod
             }
         }
 
-        public int RetrievePowerLimit()
+        public int GetPowerLimit()
         {
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = nvidiaSMIDirectory,
-                Arguments = "-q -d POWER", // example argument to show help
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            InitSMI.Arguments = ArgPowerLimit;
+            Process? process = null;
 
-            try
+            if (InitSMI != null)
             {
-                using (Process process = Process.Start(startInfo))
+                process = Process.Start(InitSMI);
+            }
+            else
+            {
+                debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
+                return 0; 
+            }
+
+            if (process != null)
+            {
+                using (StreamReader reader = process.StandardOutput)
                 {
-                    using (StreamReader reader = process.StandardOutput)
+                    string ConsoleResult = reader.ReadToEnd();
+                    //debugOptions.WriteLog("Console output: " + ConsoleResult);
+                    string[] ConsoleResultArray = ConsoleResult.Split('\n');
+
+                    foreach (string output in ConsoleResultArray)
                     {
-                        string ConsoleResult = reader.ReadToEnd();
-
-                        // filter out the nvidia smi output to only show the wattage.
-                        string[] resultLines = ConsoleResult.Split('\n');
-
-                        foreach (string output in resultLines)
+                        if (output.ToLower().Contains("current power limit") && !output.Contains("N/A"))
                         {
-                            if (output.ToLower().Contains("current power limit") && !output.Contains("N/A"))
-                            {
-                                String TempResult = output.Split(':')[1].Trim();
-                                PowerLimit = Convert.ToInt32(TempResult); // convert the current code to simply output a number.
-                                Debug.WriteLine("Current Extract Power Limit: " + PowerLimit);
-                                return PowerLimit;
-                            }
+                            //debugOptions.WriteLog("Current Power Limit Line: " + output.Split(':')[1].Trim());
+                            String PL = output.Split(':')[1].Trim();
+                            PL = PL.Replace(" W", " ");
+                            double PowerLimitDouble = Convert.ToDouble(PL);
+                            PowerLimit = (int)PowerLimitDouble;
+                            debugOptions.WriteLog("Current Power Limit: " + PowerLimit + "W");
+                            return PowerLimit;
                         }
                     }
                 }
-            }
-            catch (Exception ex)
+            } else
             {
-                Debug.WriteLine("Error starting NVIDIA SMI: " + ex.Message);
-                MessageBox.Show("Something went wrong. Provide the logs to the github.");
+                debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
+                return 0; // fallback to 0 if something went wrong, should be handled better in the future.
             }
 
-            return 0; // fallback output of 0 if the method fails to return and capture any wattage.
+            return 0;
+
         }
 
-        public bool isTDPModifiable()
+        public bool TDPModifiable()
         {
-            string args = "-pl " + Convert.ToString(RetrievePowerLimit());
-            ProcessStartInfo instance = new ProcessStartInfo
+            InitSMI.Arguments = ArgTDP + this.GetPowerLimit();
+            debugOptions.WriteLog("Checking TDP Modifiability with Argument: " + InitSMI.Arguments);
+            Process? process = null;
+
+            if (InitSMI != null)
             {
-                FileName = nvidiaSMIDirectory,
-                Arguments = args,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+                process = Process.Start(InitSMI);
+            }
+            else
+            {
+                debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
+                return false;
+            }
 
             try
             {
-                using (Process process = Process.Start(instance))
+                if (process != null)
                 {
                     using (StreamReader reader = process.StandardOutput)
                     {
                         string ConsoleResult = reader.ReadToEnd();
+                        debugOptions.WriteLog(ConsoleResult);
 
-                        Debug.WriteLine("Console output: " +  ConsoleResult);
                         string[] resultLines = ConsoleResult.Split('\n');
 
-                        foreach (string output in resultLines)
+                        foreach (string line in resultLines)
                         {
-                            if (output.ToLower().Contains("not supported") || output.ToLower().Contains("00000000:01:00.0.")) {
-                                return false; // any match above means the hardware is bios locked and can't modify the TDP.
-                            } else
+                            String output = line.ToLower();
+                            if (output.Contains("not supported") || output.Contains("00000000:01:00.0.") || output.Contains("insufficient permissions"))
                             {
-                                return true;
+                                debugOptions.WriteLog("TDP Modifiable: False, reason: " + output.Trim());
+                                return false; // any match above means the hardware is bios locked and can't modify the TDP.
                             }
                         }
                     }
+                } else
+                {
+                    debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
+                    return false;
                 }
             } catch (Exception ex)
             {
-                Debug.WriteLine("Something unexpected happened");
-                MessageBox.Show("Somethign went wrong");
+                debugOptions.WriteLog("Something unexpected happened");
             }
 
-            return false; // fallback to false just to be safe if something wrong happened in the code itself.
+            return true; // fallback to false just to be safe if something wrong happened in the code itself.
         }
+
+
     }
 
 

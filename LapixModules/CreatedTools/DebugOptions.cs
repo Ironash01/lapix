@@ -19,6 +19,8 @@ namespace LapixModules.debug
         private String DirectoryLog = string.Empty;
         private String FileLog = string.Empty;
 
+        readonly DateTime now = DateTime.Now;
+
         public DebugOptions()
         {
             DebugMode = true;
@@ -36,8 +38,6 @@ namespace LapixModules.debug
             {
                 File.Create(Path.Combine(DirectoryLog, FileLog)).Close();
             }
-
-            DateTime now = DateTime.Now;
 
             LogArgument = now.ToString("yyyy-MM-dd HH:mm:ss ") + "DEBUG OUTPUT: " + LogArgument;
 
@@ -61,15 +61,14 @@ namespace LapixModules.debug
 
         public void GuaranteeFile(String FileArgument)
         {
-            DebugOptions debugOptions = new DebugOptions();
 
             if (File.Exists(FileArgument))
             {
-                debugOptions.WriteLog("File Exists: " + FileArgument);
+                this.WriteLog("File Exists: " + FileArgument);
             }
             else
             {
-                debugOptions.WriteLog("File does not exist, creating file: " + FileArgument);
+                this.WriteLog("File does not exist, creating file: " + FileArgument);
                 File.Create(FileArgument).Close();
             }
         }
@@ -80,12 +79,12 @@ namespace LapixModules.debug
 
             if (File.Exists(FileArgument))
             {
-                debugOptions.WriteLog("File Exists: " + FileArgument);
+                this.WriteLog("File Exists: " + FileArgument);
                 return true;
             }
             else
             {
-                debugOptions.WriteLog("File does not exist: " + FileArgument);
+                this.WriteLog("File does not exist: " + FileArgument);
                 return false;
             }
         }
@@ -95,12 +94,12 @@ namespace LapixModules.debug
             DebugOptions debugOptions = new DebugOptions();
             if (Directory.Exists(FolderArgument))
             {
-                debugOptions.WriteLog("Folder Exists: " + FolderArgument);
+                this.WriteLog("Folder Exists: " + FolderArgument);
                 return true;
             }
             else
             {
-                debugOptions.WriteLog("Folder does not exist: " + FolderArgument);
+                this.WriteLog("Folder does not exist: " + FolderArgument);
                 return false;
             }
         }
