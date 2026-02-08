@@ -10,7 +10,7 @@ using LapixModules.debug; // use for process start and debug output
 
 namespace LapixModules.nsmi_mod
 {
-    
+
     public class NSMIWrapper
     {
         //nvidia smi util directory
@@ -29,6 +29,7 @@ namespace LapixModules.nsmi_mod
         // predetermined arguments
         readonly private String ArgPowerLimit = String.Empty;
         readonly private String ArgTDP = String.Empty;
+        readonly private String ArgSupportedClocks = String.Empty;
 
         DebugOptions debugOptions = new DebugOptions();
 
@@ -47,12 +48,13 @@ namespace LapixModules.nsmi_mod
 
             ArgPowerLimit = "-q -d POWER";
             ArgTDP = "-pl ";
-        } 
+            ArgSupportedClocks = "-q -d SUPPORTED_CLOCKS";
+        }
 
         public void VerifyNvidiaSMI()
         {
 
-            if(debugOptions.CheckFile(nvidiaSMIDirectory))
+            if (debugOptions.CheckFile(nvidiaSMIDirectory))
             {
                 debugOptions.WriteLog("Nvidia SMI Exists");
             }
@@ -70,35 +72,51 @@ namespace LapixModules.nsmi_mod
             else
             {
                 debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
-                return 0; 
+                return 0;
             }
-
-            if (process != null)
+            try
             {
-                using (StreamReader reader = process.StandardOutput)
+                if (process != null)
                 {
-                    string ConsoleResult = reader.ReadToEnd();
-                    //debugOptions.WriteLog("Console output: " + ConsoleResult);
-                    string[] ConsoleResultArray = ConsoleResult.Split('\n');
-
-                    foreach (string output in ConsoleResultArray)
+                    using (StreamReader reader = process.StandardOutput)
                     {
-                        if (output.ToLower().Contains("current power limit") && !output.Contains("N/A"))
+                        string ConsoleResult = reader.ReadToEnd();
+                        //debugOptions.WriteLog("Console output: " + ConsoleResult);
+                        string[] ConsoleResultArray = ConsoleResult.Split('\n');
+
+                        foreach (string output in ConsoleResultArray)
                         {
-                            //debugOptions.WriteLog("Current Power Limit Line: " + output.Split(':')[1].Trim());
-                            String PL = output.Split(':')[1].Trim();
-                            PL = PL.Replace(" W", " ");
-                            double PowerLimitDouble = Convert.ToDouble(PL);
-                            PowerLimit = (int)PowerLimitDouble;
-                            debugOptions.WriteLog("Current Power Limit: " + PowerLimit + "W");
-                            return PowerLimit;
+                            if (output.ToLower().Contains("current power limit") && !output.Contains("N/A"))
+                            {
+                                //debugOptions.WriteLog("Current Power Limit Line: " + output.Split(':')[1].Trim());
+                                String PL = output.Split(':')[1].Trim();
+                                PL = PL.Replace(" W", " ");
+                                double PowerLimitDouble = Convert.ToDouble(PL);
+                                PowerLimit = (int)PowerLimitDouble;
+                                debugOptions.WriteLog("Current Power Limit: " + PowerLimit + "W");
+                                return PowerLimit;
+                            }
                         }
                     }
                 }
-            } else
+                else
+                {
+                    debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
+                    return 0; // fallback to 0 if something went wrong, should be handled better in the future.
+                }
+            }
+            catch (Exception ex)
             {
-                debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
-                return 0; // fallback to 0 if something went wrong, should be handled better in the future.
+                debugOptions.WriteLog("Something unexpected happened: " + ex.Message);
+                return 0;
+
+            }
+            finally
+            {
+                if (process != null && !process.HasExited)
+                {
+                    process.Dispose();
+                }
             }
 
             return 0;
@@ -140,23 +158,154 @@ namespace LapixModules.nsmi_mod
                                 debugOptions.WriteLog("TDP Modifiable: False, reason: " + output.Trim());
                                 return false; // any match above means the hardware is bios locked and can't modify the TDP.
                             }
+                            else
+                            {
+                                return true;
+                            }
                         }
                     }
-                } else
+                }
+                else
                 {
                     debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
                     return false;
                 }
-            } catch (Exception ex)
+            }
+            catch (Exception ex)
             {
                 debugOptions.WriteLog("Something unexpected happened");
+            }
+            finally
+            {
+                if (process != null && !process.HasExited)
+                {
+                    process.Dispose();
+                }
             }
 
             return true; // fallback to false just to be safe if something wrong happened in the code itself.
         }
 
+        public List<int> GetSupportedClocks()
+        {
+            List<int> SupportedClocks = new List<int>();
+            InitSMI.Arguments = ArgSupportedClocks;
+            Process? process = null;
+            if (InitSMI != null)
+            {
+                process = Process.Start(InitSMI);
+            }
+            else
+            {
+                debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
+                return SupportedClocks;
+            }
+            try
+            {
+                if (process != null)
+                {
+                    using (StreamReader reader = process.StandardOutput)
+                    {
+                        string ConsoleResult = reader.ReadToEnd();
+                        debugOptions.WriteLog(ConsoleResult);
+                        string[] resultLines = ConsoleResult.Split('\n');
+                        foreach (string line in resultLines)
+                        {
+                            String output = line.ToLower();
+                            if (output.Contains("graphics") && output.Contains("mhz"))
+                            {
+                                String ClockString = output.Split(':')[1].Trim();
+                                debugOptions.WriteLog("Found Clock Line: " + ClockString);
+                                ClockString = ClockString.Replace(" mhz", " ");
+                                int ClockInt = Convert.ToInt32(ClockString);
+                                SupportedClocks.Add(ClockInt);
+                                debugOptions.WriteLog("Found Supported Clock: " + ClockInt + "MHz");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
+                    return SupportedClocks;
+                }
+            }
+            catch (Exception ex)
+            {
+                debugOptions.WriteLog("Something unexpected happened: " + ex.Message);
+                return SupportedClocks;
+            }
+            finally
+            {
+                if (process != null && !process.HasExited)
+                {
+                    process.Dispose();
+                }
+            }
 
+            SupportedClocks.Sort();
+            return SupportedClocks;
+
+        }
+
+        public List<int> GetSupportedMemoryClocks()
+        {
+            List<int> SupportedMemoryClocks = new List<int>();
+            InitSMI.Arguments = ArgSupportedClocks;
+            Process? process = null;
+            if (InitSMI != null)
+            {
+                process = Process.Start(InitSMI);
+            }
+            else
+            {
+                debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
+                return SupportedMemoryClocks;
+            }
+            try
+            {
+                if (process != null)
+                {
+                    using (StreamReader reader = process.StandardOutput)
+                    {
+                        string ConsoleResult = reader.ReadToEnd();
+                        //debugOptions.WriteLog(ConsoleResult);
+                        string[] resultLines = ConsoleResult.Split('\n');
+                        foreach (string line in resultLines)
+                        {
+                            String output = line.ToLower();
+                            if (output.Contains("memory") && output.Contains("mhz"))
+                            {
+                                String ClockString = output.Split(':')[1].Trim();
+                                //debugOptions.WriteLog("Found Memory Clock Line: " + ClockString);
+                                ClockString = ClockString.Replace(" mhz", " ");
+                                int ClockInt = Convert.ToInt32(ClockString);
+                                SupportedMemoryClocks.Add(ClockInt);
+                                debugOptions.WriteLog("Found Supported Memory Clock: " + ClockInt + "MHz");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    debugOptions.WriteLog("Process instance is null, something went wrong with the code.");
+                    return SupportedMemoryClocks;
+                }
+            }
+            catch (Exception ex)
+            {
+                debugOptions.WriteLog("Something unexpected happened: " + ex.Message);
+                return SupportedMemoryClocks;
+            }
+            finally
+            {
+                if (process != null && !process.HasExited)
+                {
+                    process.Dispose();
+                }
+            }
+            SupportedMemoryClocks.Sort();
+            return SupportedMemoryClocks;
+        }
     }
-
-
 }

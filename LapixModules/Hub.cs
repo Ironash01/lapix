@@ -5,11 +5,30 @@ namespace LapixModules
 {
     public partial class Hub : Form
     {
+
+        enum Modules
+        {
+            NvidiaSMIWrapper
+        }
         public Hub()
         {
             InitializeComponent();
+            this.ModuleLoaderUI();
             this.MethodTest();
         }
+
+        private void ModuleLoaderUI()
+        {
+            foreach (Modules modules in Enum.GetValues(typeof(Modules)))
+            {
+                ModuleSelector.Items.Add(modules);
+            }
+
+            // Default to first module.
+            ModuleSelector.SelectedIndex = 0;
+        }
+
+
 
         private void MethodTest()
         {
@@ -18,8 +37,8 @@ namespace LapixModules
 
             debugOptions.GuaranteeFolder(AppContext.BaseDirectory + "TestFolder");
             nSMIWrapper.VerifyNvidiaSMI();
-
-            MessageBox.Show("Current Power Limit: " + nSMIWrapper.GetPowerLimit() + "W" + "\n" + "TDP Modifiable?: " + nSMIWrapper.TDPModifiable());
+            nSMIWrapper.GetSupportedClocks();
+            nSMIWrapper.GetSupportedMemoryClocks();
 
         }
     }
